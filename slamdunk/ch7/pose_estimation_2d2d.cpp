@@ -16,6 +16,9 @@ using namespace cv;
 
 void find_feature_matches(const Mat& img_1, const Mat& img_2, vector<KeyPoint> keypoints_1, vector<KeyPoint> keypoints_2, vector<DMatch> matches);
 
+bool compareDescriptorDistance(DMatch& match1, DMatch& match2) {
+  return match1.distance < match2.distance;
+}
 
 
 void find_feature_matches(const Mat img_1, const Mat img_2, vector<KeyPoint> keypoints_1, vector<KeyPoint> keypoints_1, vector<DMatch> matches) {
@@ -43,9 +46,10 @@ void find_feature_matches(const Mat img_1, const Mat img_2, vector<KeyPoint> key
   // std::max_element
   // 第四步：找出所有匹配对的最大距离和最小距离
   double min_dist = 1000, max_dist;
-  min_dist = std::min_element(all_matches).distance;
-  max_dist = std::max_element().distance;
+  min_dist = std::min_element(all_matches.begin(), all_matches.end(), compareDescriptorDistance).distance;
+  max_dist = std::max_element(all_matches.begin(), all_matches.end(), compareDescriptorDistance).distance;
 
+  cout<<"min_dist: "<< min_dist<<", max_dist: "<<max_dist<<endl;
 
   // 当描述子之间的距离大于两倍的最小距离时，即认为匹配有误，但有时最小距离会非常小，因此，取经验值30作为下限
   for(int i = 0; i < descriptor_1.rows; i++) {
@@ -54,11 +58,7 @@ void find_feature_matches(const Mat img_1, const Mat img_2, vector<KeyPoint> key
       matches.push_back(all_matches[i]);
     }
   }
-
-
-
-
-
+  cout<<"matches.size(): "<<matches.size()<<endl;
 }
 
 
@@ -100,6 +100,10 @@ void pose_estimation_2d2d(std::vector<KeyPoint> keypoints_1, std::vector<KeyPoin
 }
 
 
+Point2d pixel2cam(const Point2d& p, const Mat& K) {
+  return Point2d((p.x - K.at<double>(0,2))/K.at<double>(0,0), (p.y - K.at<double>(1,2))/K.at<double>(1,1));
+}
+
 int main(int argc, char *argv[]) {
   if(argc != 3) {
     cout<<"Usage: %s img1 img2"<<endl;
@@ -107,6 +111,37 @@ int main(int argc, char *argv[]) {
   }
 
   Mat img_1 = imread(argv[1], CV_LOAD_IMAGE_COLOR);
+  Mat img_2 = imread(argv[2], CV_LOAD_IMAGE_COLOR);
+  
+  vector<KeyPoint> keypoints_1;
+  vector<KeyPoint> keypoints_2;
+  vector<DMatch> good_matches;
+
+  find_feature_matches(img_1, img_2, keypoints_1, keypoints_2, good_matches);
+  cout<<"一共找到了"<<good_matches.size()<<"对匹配点"<<endl;
+
+  // 估计两帧图像间的运动
+  Mat R,t;
+  pose_estimation_2d2d(keypoints_1, keypoints_2, good_matches, R, t);
+
+  // 验证 E=t^R*scale，E是本质矩阵
+  Mat t_x = Matx33d <<
+      0,                 -t.at<double>(2,0),    t.at<double>(1,0),
+    t.at<double>(2,0)    0,                     -t.at<double>(0,0),
+    -t.at<double>(1, 0)  t.at<double>(0, 0),    0;
+  cout<<"t^R="<<endl<<t_x*R<<endl;
+
+  // 验证对极约束
+  // 内参矩阵
+  Mat k = (Matx33d << 334.53272577769917, 0, 305.58190566496421, 0, 332.43734869658425, 230.98113455840436, 0, 0, 1);
+  for(DMatch m : matches) {
+    Point2d pt1 = pixel2cam(keypoints_1[m.queryIndex].pt, K);
+    Mat y1 = Mat3d << pt1.x, pt1.y, 1;
+    Point2d pt2 = pixel2cam(keypoints_2[m.trainIndex].pt, K);
+    Mat y2 = Mat3d << pt2.x, pt2.y, 1;
+    Mat d = y2.t() * t_x * R * y1;
+    cout<<"epipolar constraint = "<< d << endl;
+  }
+
+  return 0;
 }
-
-
