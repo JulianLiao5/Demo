@@ -25,6 +25,8 @@ using namespace cv;
 
 DEFINE_double(frameRate, 1000/30, "frame rate of images");
 DEFINE_string(stereoDir, "./", "the image list's folder");
+DEFINE_string(imgPrefix, "stereo_img_l_", "image name's prefix");
+DEFINE_int32(frameNum, 40, "how many images?");
 
 bool ReadImgList(std::string imgFolder, std::string& img_prefix, std::vector<string>& imgList) {
   const string extract_img_name = "ls "+imgFolder+" > img_name_list.txt";
@@ -52,14 +54,14 @@ int main(int argc, char *argv[]) {
 
   CHECK(!FLAGS_stereoDir.empty())<<"please set image dir";
 
-  std::string img_prefix("stereo_img_l_");
+  std::string img_prefix(FLAGS_imgPrefix);
   std::vector<std::string> imgList;
   bool result = false;
   result = ReadImgList(FLAGS_stereoDir, img_prefix, imgList);
   CHECK_EQ(result, true);
 
   std::cout<<"imgList.size(): "<<imgList.size()<<std::endl;
-  CHECK_EQ(imgList.size(), 40);
+  CHECK_EQ(imgList.size(), FLAGS_frameNum);
 
   Mat curImg;
   bool bHitPause = false;
